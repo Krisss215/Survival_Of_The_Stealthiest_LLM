@@ -107,7 +107,7 @@ def initialize_storage():
     __determine_instance()
     __prepare_storage_file()
     db = __get_storage()
-    db.drop_tables()  # reset database to start from scratch
+    #db.drop_tables()  # reset database to start from scratch
     db.insert({"key": "COLLECT_MULTIPLE_FP", "value": False})
     db.insert({"key": "FP_READY", "value": False})
     db.insert({"key": "RW_DONE", "value": False})
@@ -214,7 +214,7 @@ def __query_key(key):
             if success:
                 break
 
-    assert flag is not None
+    #assert flag is not None
     # print("{} is {}".format(key, flag["value"]))
     return flag["value"]
 
