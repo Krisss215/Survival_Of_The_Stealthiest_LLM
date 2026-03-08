@@ -16,8 +16,8 @@ from globals import get_reset_path, get_terminate_path, get_config_from_file
 # ============ 		GLOBALS 	  ==============
 # ============================================================
 
-C2_IP = "<C2-Server-IP>"
-C2_PORT = "<C2-Port>"
+C2_IP = "192.168.19.132"
+C2_PORT = "5000"
 C2_RW_ROUTE = "/rw/done"
 
 LINUX_STARTDIRS = [environ['HOME'] + '/test_ransomware']

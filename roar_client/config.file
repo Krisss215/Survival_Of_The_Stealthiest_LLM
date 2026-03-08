@@ -1,7 +1,8 @@
 [GENERAL]
-algo=AES-CTR
-rate=0
+algo = Salsa20
+rate = 200
 
 [BURST]
-duration=s0
-pause=0
+duration = s120
+pause = 30
+
