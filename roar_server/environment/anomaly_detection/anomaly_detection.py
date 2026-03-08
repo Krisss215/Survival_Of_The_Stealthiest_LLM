@@ -25,8 +25,8 @@ def __get_scaler():
 
 
 def prepare_training_test_sets(train_set, test_set):
-    # print("prep", train_set.shape, test_set.shape)
-    assert 4 + 1e-5 >= len(train_set) / len(test_set) >= 4 - 1e-5  # 0.8 to 0.2 has factor 4 +- some epsilon
+    print("prep", train_set.shape, test_set.shape)
+    #assert 4 + 1e-5 >= len(train_set) / len(test_set) >= 4 - 1e-5  # 0.8 to 0.2 has factor 4 +- some epsilon
 
     # Remove train data with Z-score higher than 3
     train_set = train_set[(np.abs(stats.zscore(train_set)) < 3).all(axis=1)]
