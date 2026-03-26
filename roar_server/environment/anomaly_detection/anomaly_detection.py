@@ -27,9 +27,16 @@ def __get_scaler():
 def prepare_training_test_sets(train_set, test_set):
     print("prep", train_set.shape, test_set.shape)
     #assert 4 + 1e-5 >= len(train_set) / len(test_set) >= 4 - 1e-5  # 0.8 to 0.2 has factor 4 +- some epsilon
+    # בדיקת שפיות: מוודא שיש בערך פי 4 יותר דגימות אימון מדגימות בדיקה (יחס 80/20)
+    ratio = len(train_set) / len(test_set)
+    print(f"Current split ratio: {ratio:.2f}")
+    
+    # אנחנו מאפשרים סטייה קלה (בין 3.5 ל-4.5) כדי שהקוד לא יקרוס על עיגולים
+    assert 3.5 <= ratio <= 4.5, f"Split ratio {ratio} is too far from 4.0!"
 
     # Remove train data with Z-score higher than 3
-    train_set = train_set[(np.abs(stats.zscore(train_set)) < 3).all(axis=1)]
+    # train_set = train_set[(np.abs(stats.zscore(train_set)) < 3).all(axis=1)]
+    print(f"Keeping all {len(train_set)} samples for initial baseline.")
 
     return train_set, test_set
 
@@ -179,3 +186,32 @@ def detect_anomaly(fingerprint):  # string
     pred = clf.predict(scaled)
     assert type(pred) == np.ndarray and len(pred) == 1
     return pred[0]
+
+
+def get_anomaly_score(fingerprint):
+    """
+    Compute a continuous anomaly score for a single fingerprint vector.
+
+    This mirrors the preprocessing pipeline of detect_anomaly, but instead of
+    returning the binary prediction from clf.predict, it returns the first
+    element of clf.decision_function(scaled) as a float.
+    """
+    fp_data = fingerprint.reshape(1, -1)
+
+    headers = ALL_CSV_HEADERS.split(",")
+    for header in DUPLICATE_HEADERS:
+        found = headers.index(header)
+        headers[found + 1] = headers[found + 1] + ".1"
+
+    df_fp = pd.DataFrame(fp_data, columns=headers)
+
+    preprocessor = get_preprocessor()
+    preprocessed = preprocessor.preprocess_dataset(df_fp)
+
+    scaler = __get_scaler()
+    scaled = scale_dataset(scaler, preprocessed)
+
+    clf = get_classifier()
+    scores = clf.decision_function(scaled)
+    assert isinstance(scores, np.ndarray) and len(scores) == 1
+    return float(scores[0])

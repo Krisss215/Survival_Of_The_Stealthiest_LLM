@@ -1,6 +1,6 @@
 from argparse import ArgumentParser
 from multiprocessing import Process
-from time import sleep
+from time import sleep, time
 
 from api import create_app
 from environment.constructor import get_controller
@@ -69,13 +69,15 @@ if __name__ == "__main__":
             procs.append(proc_api)
             proc_api.start()
 
-        # Start C2 server
-        if not is_multi_fp_collection():
-            controller = get_controller()
-            controller.run_c2()
-        else:
-            while True:
-                sleep(600)  # sleep until process is terminated by user keyboard interrupt
+        # Start C2 server (DISABLED for crawling attack experiment).
+        # Previously, the controller would run RL episodes and eventually
+        # clean up storage / terminate. For continuous data collection we
+        # keep only the API process alive and park the main thread here.
+        print("==============================")
+        print("Crawling experiment mode: RL controller disabled.")
+        print("Server will now idle and only collect fingerprints.")
+        while True:
+            sleep(10)  # keep main process alive without running RL episodes
     finally:
         if is_multi_fp_collection():
             print("==============================")
