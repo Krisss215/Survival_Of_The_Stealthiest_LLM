@@ -1,8 +1,0 @@
-[GENERAL]
-algo = Salsa20
-rate = 200
-
-[BURST]
-duration = s120
-pause = 30
-

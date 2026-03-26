@@ -25,7 +25,20 @@ def listen_for_config_changes():
                         break
                     new_config = loads(data.decode(encoding="utf-8"))
                     print("received", new_config)
-                    update_existing_config(new_config)
+
+                    # Handle detection-status-only messages separately to avoid
+                    # touching the main ransomware config file.
+                    if "detection_status" in new_config:
+                        try:
+                            with open("detection_status.txt", "w", encoding="utf-8") as f:
+                                f.write(str(new_config["detection_status"]))
+                            print(
+                                f"Updated detection status to {new_config['detection_status']}"
+                            )
+                        except OSError as e:
+                            print("Failed to update detection_status.txt:", e)
+                    else:
+                        update_existing_config(new_config)
 
 
 def collect_device_fingerprint():
@@ -59,7 +72,10 @@ if __name__ == "__main__":
 
     try:
         while True:
-            run(encrypt=True, absolute_paths=TARGET_PATH)
+            # Idle loop: keep client alive to listen for config changes
+            # and keep the fingerprinter running, without triggering
+            # encryption runs or RW done notifications.
+            sleep(10)
     finally:
         print("finally")
         for proc in procs:
