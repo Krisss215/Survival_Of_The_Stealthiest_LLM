@@ -28,9 +28,6 @@ import time
 from datetime import datetime
 from typing import List, Optional, Tuple
 from stealth_utils import is_file_in_use
-# Warm-up / Calibration Phase Settings
-START_TIME = time.time()
-WARMUP_DURATION = 120 # 2 minutes in seconds
 
 # =======================
 # Configuration Parameters
@@ -231,11 +228,68 @@ def perturb_file(
 
 
 # =======================
-# Main Loop
+# Workload Burst + Main Loop
 # =======================
 
+def run_workload_burst(
+    chars_per_step: int,
+    delay: float,
+    test_duration_sec: float = 10.0,
+) -> int:
+    """
+    Run a fixed-duration perturbation workload burst.
+
+    This function does not read detection signals; it only applies benign
+    substitutions and returns the total number of modified characters.
+    """
+    total_modified = 0
+    burst_start = time.time()
+
+    while time.time() - burst_start < test_duration_sec:
+        txt_files = list_text_files(TARGET_DIR)
+        if not txt_files:
+            print(
+                "[TextPerturbationTool] No .txt files found under "
+                f"{TARGET_DIR}. Sleeping for {delay}s..."
+            )
+            time.sleep(delay)
+            continue
+
+        chosen_file = random.choice(txt_files)
+        if is_file_in_use(chosen_file):
+            print(
+                f"[TextPerturbationTool] File in use by user, skipping for now... {chosen_file}"
+            )
+            time.sleep(delay)
+            continue
+
+        modified = perturb_file(
+            abs_path=chosen_file,
+            base_dir=TARGET_DIR,
+            chars_per_step=chars_per_step,
+        )
+
+        if modified is None:
+            print(f"[TextPerturbationTool] Failed to modify file: {chosen_file}")
+        elif modified == 0:
+            print(
+                f"[TextPerturbationTool] No suitable characters modified in: "
+                f"{chosen_file}"
+            )
+        else:
+            total_modified += modified
+            print(
+                f"[TextPerturbationTool] Modified {modified} char(s) in: "
+                f"{chosen_file}"
+            )
+
+        print(f"[TextPerturbationTool] Sleeping for {delay}s")
+        time.sleep(delay)
+
+    return total_modified
+
+
 def main() -> None:
-    global STEPS_INTERVAL
 
     if not os.path.isdir(TARGET_DIR):
         raise SystemExit(
@@ -251,93 +305,17 @@ def main() -> None:
         f"{os.path.join(TARGET_DIR, LOG_FILENAME)}"
     )
 
-    detection_status_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "detection_status.txt"
-    )
-
-    # Explicitly clear any previous detection state so we always start
-    # from "normal" (0) for a fresh crawling episode.
-    try:
-        with open(detection_status_path, "w", encoding="utf-8") as f:
-            f.write("0")
-        print("[TextPerturbationTool] Initialized detection_status.txt to 0")
-    except OSError as e:
-        print("[TextPerturbationTool] Failed to initialize detection_status.txt:", e)
-
     try:
         while True:
-            # Calibration Phase: Let the system record the baseline without attacking
-            if time.time() - START_TIME < WARMUP_DURATION:
-                print(f"[TextPerturbationTool] Calibration phase active. Waiting for model to establish baseline...")
-                time.sleep(10)
-                continue # Skip the attack logic until warm-up is done
-            # =======================
-            # Feedback-based interval adjustment
-            # =======================
-            try:
-                with open(detection_status_path, "r", encoding="utf-8") as f:
-                    status = f.read().strip()
-            except FileNotFoundError:
-                # If the file is missing, treat as normal (0) so we continue
-                # probing the threshold instead of aborting.
-                status = "0"
-            except OSError:
-                status = "0"
-
-            # Adaptive crawling logic:
-            # - Normal (0): slowly speed up (shorter interval),
-            #   but never below MIN_STEPS_INTERVAL.
-            # - Anomaly (1): immediately back off with a big jump.
-            if status == "1":
-                STEPS_INTERVAL = STEPS_INTERVAL + 15.0
-            else:
-                STEPS_INTERVAL = max(MIN_STEPS_INTERVAL, STEPS_INTERVAL - 1.0)
-
-            txt_files = list_text_files(TARGET_DIR)
-            if not txt_files:
-                print(
-                    "[TextPerturbationTool] No .txt files found under "
-                    f"{TARGET_DIR}. Sleeping for {STEPS_INTERVAL}s..."
-                )
-                time.sleep(STEPS_INTERVAL)
-                continue
-
-            chosen_file = random.choice(txt_files)
-            # Stealth Check: Is the file currently open by the user?
-            if is_file_in_use(chosen_file):
-                print(f"[TextPerturbationTool] File in use by user, skipping to stay stealthy: {chosen_file}")
-                # Sleep a little bit so we don't spam the CPU if all files are locked
-                time.sleep(1) 
-                continue
-            modified = perturb_file(
-                abs_path=chosen_file,
-                base_dir=TARGET_DIR,
-                chars_per_step=random.randint(1, 5),
+            modified_in_burst = run_workload_burst(
+                chars_per_step=CHARS_PER_STEP,
+                delay=STEPS_INTERVAL,
+                test_duration_sec=10.0,
             )
-
-            if modified is None:
-                print(
-                    f"[TextPerturbationTool] Failed to modify file: {chosen_file}"
-                )
-            elif modified == 0:
-                print(
-                    f"[TextPerturbationTool] No suitable characters modified in: "
-                    f"{chosen_file}"
-                )
-            else:
-                print(
-                    f"[TextPerturbationTool] Modified {modified} char(s) in: "
-                    f"{chosen_file}"
-                )
-
             print(
-                f"[TextPerturbationTool] Sleeping for {STEPS_INTERVAL}s "
-                f"(detection_status={status!r})"
+                f"[TextPerturbationTool] Burst complete. "
+                f"Total modified chars: {modified_in_burst}"
             )
-            # Add random jitter to evade periodicity detection
-            jitter = random.uniform(-2.0, 5.0)
-            actual_sleep = max(MIN_STEPS_INTERVAL, STEPS_INTERVAL + jitter)
-            time.sleep(actual_sleep)
     except KeyboardInterrupt:
         print("\n[TextPerturbationTool] Stopped by user.")
 
