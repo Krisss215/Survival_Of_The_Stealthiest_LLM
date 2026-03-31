@@ -41,8 +41,8 @@ TARGET_DIR = "/home/efrat/test_corpus"
 LOG_FILENAME = "user_activity_log.csv"
 
 # Gaussian delay parameters (seconds)
-DELAY_MEAN = 30.0
-DELAY_STDDEV = 10.0
+DELAY_MEAN = 20.0
+DELAY_STDDEV = 5.0
 DELAY_MIN = 5.0
 
 # File I/O retry behavior

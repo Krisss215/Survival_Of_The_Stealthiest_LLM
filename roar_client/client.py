@@ -1,5 +1,5 @@
 from os import path, remove
-from json import loads
+from json import dumps, loads
 from multiprocessing import Process
 from socket import AF_INET, SOCK_STREAM, socket
 from subprocess import call
@@ -30,8 +30,20 @@ def listen_for_config_changes():
                     # touching the main ransomware config file.
                     if "detection_status" in new_config:
                         try:
+                            # JSON so the optimizer can log threshold / raw score when the server sends them.
+                            record = {
+                                "detection_status": new_config["detection_status"]
+                            }
+                            for key in (
+                                "anomaly_score",
+                                "anomaly_score_threshold",
+                                "threshold",
+                                "score",
+                            ):
+                                if key in new_config:
+                                    record[key] = new_config[key]
                             with open("detection_status.txt", "w", encoding="utf-8") as f:
-                                f.write(str(new_config["detection_status"]))
+                                f.write(dumps(record))
                             print(
                                 f"Updated detection status to {new_config['detection_status']}"
                             )
