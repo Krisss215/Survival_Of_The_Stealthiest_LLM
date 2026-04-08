@@ -1,6 +1,6 @@
 from pymoo.core.problem import ElementwiseProblem
+from pymoo.core.callback import Callback
 from pymoo.optimize import minimize
-from pymoo.algorithms.soo.nonconvex.ga import GA
 import csv
 import json
 import numpy as np
@@ -18,6 +18,80 @@ from text_perturbation_tool import TARGET_DIR, list_text_files, run_workload_bur
 POP_SIZE = 10
 N_VAR = 2
 
+# Minimization objective: use a large constant when server reports detection (binary feedback only).
+DETECTED_FITNESS_PENALTY = 1.0e6
+
+
+class OptimizationHistoryCallback(Callback):
+    """
+    Called by pymoo after each generation (Algorithm._post_advance).
+    Appends one row per generation to optimization_history.csv and flushes so
+    progress is visible while the run continues.
+    """
+
+    def __init__(self, log_dir: str) -> None:
+        super().__init__()
+        self._path = os.path.join(log_dir, "optimization_history.csv")
+        self._generation = 0
+        self._header_written = os.path.exists(self._path) and os.path.getsize(self._path) > 0
+
+    def _append_row(
+        self,
+        generation: int,
+        best_fitness: float,
+        chars_per_step: float,
+        delay: float,
+        best_g: str,
+    ) -> None:
+        fieldnames = [
+            "generation",
+            "best_fitness",
+            "chars_per_step",
+            "delay",
+            "best_g",
+        ]
+        need_header = not self._header_written
+        try:
+            with open(self._path, "a", encoding="utf-8", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                if need_header:
+                    writer.writeheader()
+                    self._header_written = True
+                writer.writerow(
+                    {
+                        "generation": generation,
+                        "best_fitness": f"{best_fitness:.8g}",
+                        "chars_per_step": f"{chars_per_step:.8g}",
+                        "delay": f"{delay:.8g}",
+                        "best_g": best_g,
+                    }
+                )
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError as e:
+            print(f"[OptimizationHistoryCallback] Failed to write log: {e}")
+
+    def notify(self, algorithm) -> None:
+        opt = algorithm.opt
+        if opt is None or len(opt) == 0:
+            return
+
+        self._generation += 1
+        X = np.atleast_2d(opt.get("X"))
+        F = np.atleast_2d(opt.get("F"))
+        G = opt.get("G")
+        best_x = X[0]
+        best_f = float(np.atleast_1d(F[0])[0])
+        if G is not None:
+            G2 = np.atleast_2d(G)
+            best_g = f"{float(np.atleast_1d(G2[0])[0]):.8g}"
+        else:
+            best_g = ""
+
+        chars = float(best_x[0])
+        delay = float(best_x[1]) if best_x.size > 1 else float("nan")
+        self._append_row(self._generation, best_f, chars, delay, best_g)
+
 
 def make_stealth_warm_start_X(problem: ElementwiseProblem, pop_size: int) -> np.ndarray:
     """
@@ -29,24 +103,12 @@ def make_stealth_warm_start_X(problem: ElementwiseProblem, pop_size: int) -> np.
     return np.tile(stealth, (pop_size, 1))
 
 
-def _continuous_detection_constraint(
-    server_threshold, anomaly_score, feedback_status: int
-) -> float:
+def _binary_detection_constraint(feedback_status: int) -> float:
     """
     Inequality constraint g <= 0 means feasible.
-
-    g = threshold - anomaly_score:
-    - score below threshold => g > 0 (violation / "hot")
-    - score above threshold => g < 0 (feasible margin)
+    Uses only detection_status (0/1), not anomaly_score or threshold.
     """
-    if server_threshold is None or anomaly_score is None:
-        return 1.0 if feedback_status == 1 else 0.0
-    try:
-        thr = float(server_threshold)
-        scr = float(anomaly_score)
-    except (TypeError, ValueError):
-        return 1.0 if feedback_status == 1 else 0.0
-    return thr - scr
+    return 1.0 if feedback_status == 1 else 0.0
 
 
 class RoarOptimizationProblemGA(ElementwiseProblem):
@@ -225,9 +287,7 @@ class RoarOptimizationProblemGA(ElementwiseProblem):
                     f"[DETECTION EVENT] First detection at {self.first_detection_seconds:.3f} seconds"
                 )
 
-            g_detection = _continuous_detection_constraint(
-                server_threshold, anomaly_score, feedback["status"]
-            )
+            g_detection = _binary_detection_constraint(feedback["status"])
 
             self._append_attack_research_row(
                 chars_per_step=chars_per_step,
@@ -242,18 +302,26 @@ class RoarOptimizationProblemGA(ElementwiseProblem):
                 g_detection=g_detection,
             )
 
+            # Binary feedback only: no use of raw score for F or G.
             if self.stop_requested:
-                out["F"] = [0.0]
+                out["F"] = [DETECTED_FITNESS_PENALTY]
+                out["G"] = [1.0]
+                return
+
+            if is_detected:
+                out["F"] = [DETECTED_FITNESS_PENALTY]
                 out["G"] = [1.0]
                 return
 
             f1 = -1.0 * throughput_this_burst
 
         out["F"] = [f1]
-        out["G"] = [g_detection]
+        out["G"] = [0.0]
 
 
 if __name__ == "__main__":
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
     WARMUP_DURATION = 120
     print(f"Waiting for server warmup ({WARMUP_DURATION}s) to establish baseline...")
     time.sleep(WARMUP_DURATION)
@@ -278,13 +346,61 @@ if __name__ == "__main__":
         eliminate_duplicates=False,
     )
 
+    history_cb = OptimizationHistoryCallback(_SCRIPT_DIR)
+
     res = minimize(
         problem,
         algorithm,
         ("n_gen", 50),
         seed=1,
         verbose=True,
+        callback=history_cb,
     )
+
+    # Final best solution (separate small artifact; overwrite each run).
+    _final_path = os.path.join(_SCRIPT_DIR, "final_best_params.csv")
+    try:
+        with open(_final_path, "w", encoding="utf-8", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(
+                [
+                    "finished_utc",
+                    "best_chars_per_step",
+                    "best_delay",
+                    "best_fitness",
+                    "best_g",
+                ]
+            )
+            if res.X is not None and res.F is not None:
+                x = np.atleast_1d(res.X).flatten()
+                fv = float(np.atleast_1d(res.F).flatten()[0])
+                gv = ""
+                if res.G is not None:
+                    gv = f"{float(np.atleast_1d(res.G).flatten()[0]):.8g}"
+                w.writerow(
+                    [
+                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        f"{float(x[0]):.8g}",
+                        f"{float(x[1]):.8g}" if x.size > 1 else "",
+                        f"{fv:.8g}",
+                        gv,
+                    ]
+                )
+            else:
+                w.writerow(
+                    [
+                        datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "",
+                        "",
+                        "",
+                        "",
+                    ]
+                )
+            f.flush()
+            os.fsync(f.fileno())
+        print(f"[GA] Wrote final best solution to {_final_path}")
+    except OSError as e:
+        print(f"[GA] Failed to write final_best_params.csv: {e}")
 
     print("--- Optimization Results (GA) ---")
     if res.X is None or res.F is None:
