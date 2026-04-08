@@ -1,1 +1,1 @@
-{"detection_status": "0", "anomaly_score": "0.12336905660925038", "anomaly_score_threshold": "0.05046688424254013"}
+{"detection_status": "0", "anomaly_score": "0.13683150717349085", "anomaly_score_threshold": "0.036157220488586925"}
