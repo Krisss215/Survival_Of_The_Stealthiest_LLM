@@ -3,6 +3,7 @@ import time
 import json
 import socket
 import csv
+from collections import deque
 
 import numpy as np
 
@@ -23,6 +24,13 @@ WARMUP_DURATION = 120  # 20 mins
 baseline_scores = []
 ANOMALY_SCORE_THRESHOLD = 0.05
 ANOMALY_LOG_FILE = "anomaly_log.csv"
+
+# After warmup, refresh the adaptive threshold from a sliding window every N samples
+# (blended with the previous threshold to avoid sudden jumps).
+THRESHOLD_UPDATE_EVERY_N = 30
+THRESHOLD_BLEND = 0.4
+post_warmup_score_window = deque(maxlen=THRESHOLD_UPDATE_EVERY_N)
+POST_WARMUP_SAMPLE_COUNT = 0
 
 
 
@@ -62,19 +70,22 @@ def read_latest_fingerprint(fp_path):
     return np.asarray(values)
 
 
-def send_detection_status(status):
+def send_detection_status(status, anomaly_score, anomaly_score_threshold):
     """
-    Send a JSON detection status message to the client over TCP.
-    status is 0 (normal) or 1 (anomaly).
+    Send a JSON message to the client over TCP (e.g. for detection_status.txt / research CSV).
     """
-    payload = {"detection_status": str(int(status))}
+    payload = {
+        "detection_status": int(status),
+        "anomaly_score_threshold": float(anomaly_score_threshold),
+        "anomaly_score": float(anomaly_score),
+    }
     data = json.dumps(payload).encode("utf-8")
 
     try:
         with socket.create_connection((CLIENT_IP, CLIENT_PORT), timeout=2.0) as sock:
             sock.sendall(data)
     except OSError as exc:
-        print(f"[live_ad_bridge] Failed to send detection_status={payload['detection_status']} to "
+        print(f"[live_ad_bridge] Failed to send payload={payload!r} to "
               f"{CLIENT_IP}:{CLIENT_PORT}: {exc}")
 
 
@@ -95,6 +106,7 @@ def monitor_fingerprints():
     Watch the storage/ directory for updates to fp-*.txt and run live AD inference.
     """
     global START_TIME, IS_WARMUP, baseline_scores, ANOMALY_SCORE_THRESHOLD
+    global post_warmup_score_window, POST_WARMUP_SAMPLE_COUNT
 
     storage_dir = os.path.join(os.path.abspath(os.path.curdir), "storage")
     print(f"[live_ad_bridge] Monitoring fingerprints in: {storage_dir}")
@@ -138,28 +150,44 @@ def monitor_fingerprints():
                 IS_WARMUP = True
                 baseline_scores.append(score)
                 is_anomaly = 0
+                threshold_used = ANOMALY_SCORE_THRESHOLD
             else:
                 if IS_WARMUP:
                     IS_WARMUP = False
                     if baseline_scores:
                         ANOMALY_SCORE_THRESHOLD = np.percentile(baseline_scores, 1)
+                    post_warmup_score_window.clear()
+                    POST_WARMUP_SAMPLE_COUNT = 0
 
+                threshold_used = ANOMALY_SCORE_THRESHOLD
                 if score >= ANOMALY_SCORE_THRESHOLD:
                     is_anomaly = 0
-                    ANOMALY_SCORE_THRESHOLD = (0.01 * score) + (0.99 * ANOMALY_SCORE_THRESHOLD)
                 else:
                     is_anomaly = 1
 
+                post_warmup_score_window.append(float(score))
+                POST_WARMUP_SAMPLE_COUNT += 1
+                if (
+                    POST_WARMUP_SAMPLE_COUNT % THRESHOLD_UPDATE_EVERY_N == 0
+                    and len(post_warmup_score_window) >= THRESHOLD_UPDATE_EVERY_N
+                ):
+                    window = list(post_warmup_score_window)
+                    p1 = np.percentile(window, 1)
+                    ANOMALY_SCORE_THRESHOLD = (
+                        THRESHOLD_BLEND * p1
+                        + (1.0 - THRESHOLD_BLEND) * ANOMALY_SCORE_THRESHOLD
+                    )
+
             print(f"[Adaptive AD] Status: {'WARMUP' if IS_WARMUP else 'ACTIVE'} | "
-                  f"Score: {score:.4f} | Threshold: {ANOMALY_SCORE_THRESHOLD:.4f} | "
+                  f"Score: {score:.4f} | Threshold (decision): {threshold_used:.4f} | "
                   f"Anomaly: {is_anomaly}")
 
-            append_anomaly_log(time.time(), score, ANOMALY_SCORE_THRESHOLD, is_anomaly)
+            append_anomaly_log(time.time(), score, threshold_used, is_anomaly)
 
             if is_anomaly:
                 print("=== LIVE AD WARNING: ANOMALY DETECTED (detection_status=1) ===")
 
-            send_detection_status(is_anomaly)
+            send_detection_status(is_anomaly, score, threshold_used)
 
         time.sleep(FP_POLL_INTERVAL_SECONDS)
 
