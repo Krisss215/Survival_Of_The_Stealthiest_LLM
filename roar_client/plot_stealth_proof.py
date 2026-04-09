@@ -103,8 +103,8 @@ def plot_stealth_proof(
     x_vals, dist_vals, cumulative_vals, score_vals = _load_delta_series_single_csv(workload_csv)
 
     os.makedirs(output_dir, exist_ok=True)
-    distance_path = os.path.join(output_dir, "distance_plot.png")
-    cumulative_path = os.path.join(output_dir, "cumulative_plot.png")
+    distance_path = os.path.join(output_dir, "distance_plot.pdf")
+    cumulative_path = os.path.join(output_dir, "cumulative_plot.pdf")
 
     # --- Figure 1: distance from threshold ---
     fig1, ax_top = plt.subplots(figsize=(12, 5))
@@ -138,7 +138,7 @@ def plot_stealth_proof(
 
     fig1.tight_layout()
     fig1.subplots_adjust(top=0.88)
-    fig1.savefig(distance_path, dpi=300)
+    fig1.savefig(distance_path,format='pdf', dpi=300)
     plt.close(fig1)
     print(f"Saved figure to: {distance_path}")
 
@@ -169,7 +169,7 @@ def plot_stealth_proof(
 
     fig2.tight_layout()
     fig2.subplots_adjust(top=0.88)
-    fig2.savefig(cumulative_path, dpi=300)
+    fig2.savefig(cumulative_path, format='pdf',dpi=300)
     plt.close(fig2)
     print(f"Saved figure to: {cumulative_path}")
 
