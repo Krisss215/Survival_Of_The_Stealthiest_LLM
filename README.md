@@ -29,12 +29,6 @@ The GA-evolved attack successfully identified a "stealth boundary" that bypassed
 * `pymoo` library 
 * Target environment with system status logging enabled
 
-### Running the Optimizer
-```bash
-python evolve_attack.py --pop_size 40 --generations 50
-```
-*The default configuration uses Simulated Binary Crossover (SBX) and Polynomial Mutation as detailed in the methodology.*
-
 ## 📂 Repository Structure
 * `/roar_client`: Implementation of the client+attacker.
 * `/roar_server`: Implementation of the server.
