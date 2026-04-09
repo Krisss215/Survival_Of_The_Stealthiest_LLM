@@ -1,7 +1,3 @@
-[cite_start]Here is a draft for your repository's `README.md` file, structured to be professional for an academic project following the **SSBSE 2026 Challenge**[cite: 420, 424].
-
----
-
 # Survival of the Stealthiest: Evolving Low-Entropy Ransomware
 
 [cite_start]This repository contains the implementation and experimental data for **"Survival of the Stealthiest: Evolving Low-Entropy Ransomware via Genetic Algorithms,"** a study exploring Search-Based Software Engineering (SBSE) techniques to generate evasive, low-noise cryptographic attacks[cite: 420, 424].
