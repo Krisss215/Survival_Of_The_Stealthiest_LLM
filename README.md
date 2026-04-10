@@ -21,7 +21,7 @@ The GA-evolved attack successfully identified a "stealth boundary" that bypassed
 | :--- | :--- | :--- |
 | **Total Time** | ~3,000s | ~30,000s  |
 | **Detection Events** | 0 | 0  |
-| **Encryption Progress**| 100% | 100%  |
+| **Encryption Progress**| 10% | 100%  |
 
 ## 🚀 Getting Started
 ### Prerequisites
