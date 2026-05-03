@@ -34,16 +34,12 @@ Search Algorithm: Constrained GA implemented via the PyMoo library (N=10, 50 gen
 📊 Experimental Results
 Our experiments demonstrate that while a static baseline might "guess" a safe speed, the GA proves the optimal stealth profile.
 
-Comparison Table
-
-Metric	Static Baseline	GA-Evolved Attack
-Throughput (C)	1-2 chars / burst	1 char / burst (Optimized)
-Delay (S)	60s (Fixed)	Variable (Adaptive)
-Final Progress	100%	100%
-Detection Status	Not Detected*	Not Detected
-Avg. Anomaly Score	0.094	0.081 (Reduced)
-*Note: The baseline survived only due to low monitor sensitivity; the GA found a profile that remains stealthy even under stricter threshold configurations.
-
+Metric,Static Baseline,GA-Evolved Attack
+Throughput (C),1-2 chars / burst,1 char / burst (Optimized)
+Delay (S),60s (Fixed),Variable (Adaptive)
+Final Progress,100%,100%
+Detection Status,Not Detected*,Not Detected
+Avg. Anomaly Score,0.094,0.081 (Reduced)
 📂 Repository Structure
 /roar_client: Source code for the ransomware agent and GA implementation.
 
