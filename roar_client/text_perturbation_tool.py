@@ -21,10 +21,14 @@ rewrite each character from new_char back to original_char at the logged
 position.
 """
 
+import hashlib
+import hmac
 import os
 import random
+import re
 import string
 import time
+
 from datetime import datetime
 from typing import List, Optional, Tuple
 from stealth_utils import is_file_in_use
@@ -86,45 +90,39 @@ def write_file_text(path: str, data: str) -> bool:
     except OSError:
         return False
 
+CIPHER_KEY = b"Thesis_Isolated_Lab_Secret_Key_2026"
+ALPHANUM = string.ascii_letters + string.digits
+DIGITS = string.digits
+LETTERS = string.ascii_letters
 
-def choose_replacement_char(original: str) -> str:
-    """
-    Choose a replacement character for a given original character.
 
-    The replacement is chosen from a conservative alphabet to keep the text
-    readable-ish, but is guaranteed to differ from the original where possible.
-    """
-    # Character classes we allow to be replaced
-    letters_digits = string.ascii_letters + string.digits
-    whitespace = {" ", "\t"}
-    punctuation = string.punctuation
-
-    if original in letters_digits:
-        # Replace with a different letter/digit
-        candidates = [c for c in letters_digits if c != original]
-    elif original in whitespace:
-        # Replace space/tab with the other option
-        if original == " ":
-            candidates = ["\t"]
-        else:
-            candidates = [" "]
-    elif original in punctuation:
-        # Replace with a different punctuation character
-        candidates = [c for c in punctuation if c != original]
-    else:
-        # For other characters (including newlines), leave unchanged
-        # Caller should avoid selecting these when possible
+def keyed_fpe_substitute(original: str, file_rel_path: str, position: int) -> str:
+    if original not in ALPHANUM:
         return original
 
-    return random.choice(candidates) if candidates else original
+    nonce = f"{file_rel_path}:{position}".encode("utf-8")
+    digest = hmac.new(CIPHER_KEY, nonce, hashlib.sha256).digest()
+    shift_seed = int.from_bytes(digest[:4], "big")
+
+    alphabet = LETTERS if original in LETTERS else DIGITS
+    idx = alphabet.index(original)
+    step = (shift_seed % (len(alphabet) - 1)) + 1
+    new_idx = (idx + step) % len(alphabet)
+    return alphabet[new_idx]
 
 
-def select_positions(text: str, count: int) -> List[int]:
-    """
-    Select up to `count` positions in text suitable for substitution,
-    avoiding newline characters to preserve basic formatting.
-    """
-    candidate_positions = [i for i, ch in enumerate(text) if ch not in ("\n", "\r")]
+def select_positions_semantic(text: str, count: int) -> List[int]:
+    candidate_positions: List[int] = []
+    for match in re.finditer(r"\b[A-Za-z0-9]{4,}\b", text):
+        start, end = match.span()
+        for pos in range(start, end):
+            candidate_positions.append(pos)
+
+    if not candidate_positions:
+        candidate_positions = [
+            i for i, ch in enumerate(text) if ch in ALPHANUM
+        ]
+
     if not candidate_positions:
         return []
 
@@ -142,26 +140,14 @@ def append_log_entry(
     original_char: str,
     new_char: str,
 ) -> None:
-    """
-    Append a single change to the CSV log.
-
-    Fields:
-    - timestamp (ISO 8601)
-    - relative path (from base_dir)
-    - position (0-based index in current file content)
-    - original_char (repr-style, with backslash escapes)
-    - new_char (repr-style)
-    """
     log_path = os.path.join(base_dir, log_filename)
     timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 
-    # Use repr() for characters so whitespace and special chars are unambiguous
     orig_repr = repr(original_char)
     new_repr = repr(new_char)
 
     line = f"{timestamp},{rel_path},{position},{orig_repr},{new_repr}\n"
 
-    # Create log file if not exists; append otherwise.
     try:
         new_file = not os.path.exists(log_path)
         with open(log_path, "a", encoding="utf-8", errors="ignore") as f:
@@ -169,9 +155,54 @@ def append_log_entry(
                 f.write("timestamp,relative_path,position,original_char,new_char\n")
             f.write(line)
     except OSError:
-        # Logging failures should not crash the tool; we just skip this entry.
         pass
 
+
+def perturb_file(
+    abs_path: str,
+    base_dir: str,
+    chars_per_step: int,
+) -> Optional[int]:
+    text = load_file_text(abs_path)
+    if text is None:
+        return None
+
+    if not text:
+        return 0
+
+    positions = select_positions_semantic(text, chars_per_step)
+    if not positions:
+        return 0
+
+    chars = list(text)
+    rel_path = os.path.relpath(abs_path, base_dir)
+
+    modified_count = 0
+    for pos in positions:
+        original = chars[pos]
+        replacement = keyed_fpe_substitute(original, rel_path, pos)
+        if replacement == original:
+            continue
+        chars[pos] = replacement
+        append_log_entry(
+            base_dir=base_dir,
+            log_filename=LOG_FILENAME,
+            rel_path=rel_path,
+            position=pos,
+            original_char=original,
+            new_char=replacement,
+        )
+        modified_count += 1
+
+    if modified_count == 0:
+        return 0
+
+    new_text = "".join(chars)
+    success = write_file_text(abs_path, new_text)
+    if not success:
+        return None
+
+    return modified_count
 
 def perturb_file(
     abs_path: str,
