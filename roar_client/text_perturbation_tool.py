@@ -33,6 +33,8 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from stealth_utils import is_file_in_use
 
+
+TARGET_DIR = "/home/kristina2/test_corpus"
 # =======================
 # Configuration Parameters
 # =======================
