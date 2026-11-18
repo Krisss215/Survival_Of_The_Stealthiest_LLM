@@ -15,6 +15,10 @@ from pymoo.operators.mutation.pm import PM
 
 from text_perturbation_tool import TARGET_DIR, list_text_files, run_workload_burst
 
+
+
+BASELINE_DIR = "/home/kristina2/clean_corpus_baseline"
+
 POP_SIZE = 10
 N_VAR = 2
 
